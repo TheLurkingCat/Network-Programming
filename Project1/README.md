@@ -1,2 +1,2 @@
 # Project 1
-## Simple BBS server
+## Bulletin Board System: Part 1
