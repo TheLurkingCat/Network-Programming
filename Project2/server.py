@@ -53,7 +53,7 @@ class Server(socketserver.StreamRequestHandler):
                     if users.find_one({"username": username}) is None:
                         users.insert_one(
                             {"username": username, "email": email, "password": password})
-                        self.wfile.write(SUCESS_REGISTER)
+                        self.wfile.write(SUCCESS_REGISTER)
                     else:
                         self.wfile.write(FAIL_REG)
             elif commands[0] == "login":
@@ -97,7 +97,7 @@ class Server(socketserver.StreamRequestHandler):
                     else:
                         boards.insert_one(
                             {"board_name": board_name, "mod": name})
-                        self.wfile.write(SUCESS_BOARD_CREATED)
+                        self.wfile.write(SUCCESS_BOARD_CREATED)
             elif commands[0] == "create-post":
                 if len(commands) < 6:
                     self.wfile.write(HELP_CREATE_POST)
@@ -120,7 +120,7 @@ class Server(socketserver.StreamRequestHandler):
 
                         posts.insert_one(
                             {'board_name': commands[1], 'title': title, 'content': content, 'owner': name, 'date': date, 'post_id': pid})
-                        self.wfile.write(SUCESS_POST_CREATED)
+                        self.wfile.write(SUCCESS_POST_CREATED)
             elif commands[0] == "list-board":
                 output = [b'\tIndex\tName\tModerator\r\n']
                 if len(commands) == 1:
@@ -202,7 +202,7 @@ class Server(socketserver.StreamRequestHandler):
                         else:
                             posts.delete_one({"post_id": pid})
                             comments.delete_many({"post_id": pid})
-                            self.wfile.write(SUCESS_POST_DELETED)
+                            self.wfile.write(SUCCESS_POST_DELETED)
             elif commands[0] == 'update-post':
                 if len(commands) < 4:
                     self.wfile.write(HELP_UPDATE_POST)
@@ -222,12 +222,12 @@ class Server(socketserver.StreamRequestHandler):
                         extracted = re.match(r'.*--title (.*)', recv_data)
                         posts.find_one_and_update(
                             {"post_id": pid}, {"$set": {"title": extracted.group(1)}})
-                        self.wfile.write(SUCESS_UPDATE_POST)
+                        self.wfile.write(SUCCESS_UPDATE_POST)
                     elif "content" in recv_data:
                         extracted = re.match(r'.*--content (.*)', recv_data)
                         posts.find_one_and_update(
                             {"post_id": pid}, {"$set": {"content": extracted.group(1).replace('<br>', '\r\n')}})
-                        self.wfile.write(SUCESS_UPDATE_POST)
+                        self.wfile.write(SUCCESS_UPDATE_POST)
             elif commands[0] == "comment":
                 if len(commands) < 3:
                     self.wfile.write(HELP_COMMENT)
@@ -248,7 +248,7 @@ class Server(socketserver.StreamRequestHandler):
 
                             comments.insert_one(
                                 {"post_id": pid, "owner": name, "content": extracted.group(1)})
-                            self.wfile.write(SUCESS_COMMENT)
+                            self.wfile.write(SUCCESS_COMMENT)
             else:
                 print(ERROR + " Unknown command:", commands)
         self.request.shutdown(socket.SHUT_RDWR)
