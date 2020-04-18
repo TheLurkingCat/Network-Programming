@@ -6,6 +6,7 @@ import socketserver
 import sys
 
 import pymongo
+from colorama import Fore, Style
 
 WELCOME = [b"********************************\r\n",
            b"** Welcome to the BBS server. **\r\n",
@@ -13,6 +14,9 @@ WELCOME = [b"********************************\r\n",
 READ_POST_FORMAT = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{}\r\n--\r\n{}\r\n--\r\n"
 PROMPT = b"% "
 
+WAITING = Fore.YELLOW + "[ ... ]" + Style.RESET_ALL
+COMPLETE = Fore.GREEN + "[ OK ]" + Style.RESET_ALL
+ERROR = Fore.RED + "[ FAIL ]" + Style.RESET_ALL
 HELP_REG = b"Usage: register <username> <email> <password>\r\n"
 HELP_LOGIN = b"Usage: login <username> <password>\r\n"
 HELP_CREATE_BOARD = b"Usage: create-board <name>\r\n"
@@ -27,10 +31,11 @@ FAIL_REG = b"Username is already used.\r\n"
 FAIL_LOGIN_ALREADY = b"Please logout first.\r\n"
 FAIL_LOGIN_INCORRECT = b"Login failed.\r\n"
 FAIL_UNAUTHORIZED = b"Please login first.\r\n"
-FAIL_BOARD_EXISTS = b"Board is already exist.\r\n"
+FAIL_BOARD_EXISTS = b"Board already exist.\r\n"
 FAIL_BOARD_NOT_EXISTS = b"Board is not exist.\r\n"
 FAIL_POST_NOT_EXISTS = b"Post is not exist.\r\n"
 FAIL_NOT_OWNER = b"Not the post owner.\r\n"
+SUCESS_REGISTER = b"Register successfully.\r\n"
 SUCESS_BOARD_CREATED = b"Create board successfully.\r\n"
 SUCESS_POST_CREATED = b"Create post successfully\r\n"
 SUCESS_POST_DELETED = b"Delete successfully.\r\n"
@@ -51,7 +56,8 @@ def apply_backspace(string):
 class Server(socketserver.StreamRequestHandler):
     def handle(self):
         print("New connection.")
-        print(self.client_address, "start the connection.")
+        print(COMPLETE + " Client {}{}:{}{} starts the connection.".format(
+            Fore.MAGENTA, *self.client_address, Style.RESET_ALL))
         self.wfile.writelines(WELCOME)
         client = pymongo.MongoClient()
         users = client['NP']['user']
@@ -67,7 +73,7 @@ class Server(socketserver.StreamRequestHandler):
             try:
                 recv_data = recv_data.decode()
             except UnicodeDecodeError:
-                print("Decode Error")
+                print(ERROR + " Decode Error", recv_data)
                 continue
             recv_data = apply_backspace(recv_data).strip()
             commands = recv_data.split()
@@ -82,6 +88,7 @@ class Server(socketserver.StreamRequestHandler):
                     if users.find_one({"username": username}) is None:
                         users.insert_one(
                             {"username": username, "email": email, "password": password})
+                        self.wfile.write(SUCESS_REGISTER)
                     else:
                         self.wfile.write(FAIL_REG)
             elif commands[0] == "login":
@@ -110,7 +117,8 @@ class Server(socketserver.StreamRequestHandler):
                 else:
                     self.wfile.write("{}\r\n".format(name).encode())
             elif commands[0] == "exit":
-                print(self.client_address, "closed the connection.")
+                print(COMPLETE + " Client {}{}:{}{} closes the connection.".format(
+                    Fore.MAGENTA, *self.client_address, Style.RESET_ALL))
                 break
             elif commands[0] == "create-board":
                 if len(commands) != 2:
@@ -251,7 +259,7 @@ class Server(socketserver.StreamRequestHandler):
                                 {"post_id": pid, "owner": name, "content": commands[2]})
                             self.wfile.write(SUCESS_COMMENT)
             else:
-                print("Unknown command:", commands)
+                print(ERROR + " Unknown command:", commands)
         self.request.shutdown(socket.SHUT_RDWR)
         self.request.close()
 
@@ -260,9 +268,22 @@ def main():
     try:
         port = int(sys.argv[1])
     except IndexError:
-        port = 23
-    server = socketserver.ThreadingTCPServer(("0.0.0.0", port), Server)
-    server.serve_forever()
+        port = 5000
+    socketserver.ForkingTCPServer.allow_reuse_address = True
+    server = socketserver.ForkingTCPServer(("0.0.0.0", port), Server)
+    print(COMPLETE + " Server is running on port", port)
+    print(WAITING + " Waiting for connections.")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\b\b" + WAITING + " Shutting down server.")
+        server.shutdown()
+        print(COMPLETE + " Server closed.")
+        #print(WAITING + " Cleaning up database.")
+        #client = pymongo.MongoClient()
+        # client['NP']['user'].drop()
+        #print(COMPLETE + " All table dropped.")
 
 
 if __name__ == '__main__':
