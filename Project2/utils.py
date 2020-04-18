@@ -43,3 +43,44 @@ SUCCESS_COMMENT = b"Comment successfully.\r\n"
 APPLY_BACKSPACE = re.compile('[^\x08]\x08')
 REMOVE_TRAILING_BACKSPACE = re.compile('\x08+')
 TIMEZONE = datetime.timezone(datetime.timedelta(hours=8))
+EXTRACT_NEW_POST_FORMAT = re.compile(r'.*--title (.*) --content (.*)')
+EXTRACT_KEYWORD = re.compile(r'.*##(.*)')
+EXTRACT_TITLE = re.compile(r'.*--title (.*)')
+EXTRACT_CONTENT = re.compile(r'.*--content (.*)')
+EXTRACT_COMMENT = re.compile(r'comment \d+ (.*)')
+
+
+def error(*args):
+    print(ERROR, *args)
+
+
+def waiting(*args):
+    print(WAITING, *args)
+
+
+def complete(*args):
+    print(COMPLETE, *args)
+
+
+def extract_post(string):
+    return EXTRACT_NEW_POST_FORMAT.match(string)
+
+
+def extract_keyword(string):
+    return EXTRACT_KEYWORD(string)
+
+
+def extract_title_content(string):
+    return EXTRACT_TITLE(string), EXTRACT_CONTENT(string)
+
+
+def extract_comment(string):
+    return EXTRACT_COMMENT(string)
+
+
+def apply_backspace(string):
+    while True:
+        temp_string = APPLY_BACKSPACE.sub('', string)
+        if len(string) == len(temp_string):
+            return REMOVE_TRAILING_BACKSPACE.sub('', temp_string)
+        string = temp_string
