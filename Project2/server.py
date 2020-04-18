@@ -6,43 +6,8 @@ import socketserver
 import sys
 
 import pymongo
-from colorama import Fore, Style
 
-WELCOME = [b"********************************\r\n",
-           b"** Welcome to the BBS server. **\r\n",
-           b"********************************\r\n"]
-READ_POST_FORMAT = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{}\r\n--\r\n{}\r\n--\r\n"
-PROMPT = b"% "
-
-WAITING = Fore.YELLOW + "[ ... ]" + Style.RESET_ALL
-COMPLETE = Fore.GREEN + "[ OK ]" + Style.RESET_ALL
-ERROR = Fore.RED + "[ FAIL ]" + Style.RESET_ALL
-HELP_REG = b"Usage: register <username> <email> <password>\r\n"
-HELP_LOGIN = b"Usage: login <username> <password>\r\n"
-HELP_CREATE_BOARD = b"Usage: create-board <name>\r\n"
-HELP_CREATE_POST = b"Usage: create-post <board-name> --title <title> --content <content>\r\n"
-HELP_LIST_BOARD = b"list-board ##<key>\r\n"
-HELP_LIST_POST = b"list-post <board-name> ##<key>\r\n"
-HELP_READ_POST = b"read <post-id>\r\n"
-HELP_DELETE_POST = b"delete-post <post-id>\r\n"
-HELP_UPDATE_POST = b"update-post <post-id> --title/content <new>\r\n"
-HELP_COMMENT = b"comment <post-id> <comment>\r\n"
-FAIL_REG = b"Username is already used.\r\n"
-FAIL_LOGIN_ALREADY = b"Please logout first.\r\n"
-FAIL_LOGIN_INCORRECT = b"Login failed.\r\n"
-FAIL_UNAUTHORIZED = b"Please login first.\r\n"
-FAIL_BOARD_EXISTS = b"Board already exist.\r\n"
-FAIL_BOARD_NOT_EXISTS = b"Board is not exist.\r\n"
-FAIL_POST_NOT_EXISTS = b"Post is not exist.\r\n"
-FAIL_NOT_OWNER = b"Not the post owner.\r\n"
-SUCESS_REGISTER = b"Register successfully.\r\n"
-SUCESS_BOARD_CREATED = b"Create board successfully.\r\n"
-SUCESS_POST_CREATED = b"Create post successfully\r\n"
-SUCESS_POST_DELETED = b"Delete successfully.\r\n"
-SUCESS_COMMENT = b"Comment successfully.\r\n"
-APPLY_BACKSPACE = re.compile('[^\x08]\x08')
-REMOVE_TRAILING_BACKSPACE = re.compile('\x08+')
-TIMEZONE = datetime.timezone(datetime.timedelta(hours=8))
+from defines import *
 
 
 def apply_backspace(string):
@@ -56,14 +21,14 @@ def apply_backspace(string):
 class Server(socketserver.StreamRequestHandler):
     def handle(self):
         print("New connection.")
-        print(COMPLETE + " Client {}{}:{}{} starts the connection.".format(
-            Fore.MAGENTA, *self.client_address, Style.RESET_ALL))
+        print(ONLINE.format(*self.client_address))
         self.wfile.writelines(WELCOME)
         client = pymongo.MongoClient()
         users = client['NP']['user']
         boards = client['NP']['board']
         posts = client['NP']['post']
         comments = client['NP']['comment']
+        idx = client['NP']['idx']
         name = None
         while True:
             self.wfile.write(PROMPT)
@@ -117,8 +82,7 @@ class Server(socketserver.StreamRequestHandler):
                 else:
                     self.wfile.write("{}\r\n".format(name).encode())
             elif commands[0] == "exit":
-                print(COMPLETE + " Client {}{}:{}{} closes the connection.".format(
-                    Fore.MAGENTA, *self.client_address, Style.RESET_ALL))
+                print(OFFLINE.format(*self.client_address))
                 break
             elif commands[0] == "create-board":
                 if len(commands) != 2:
@@ -148,22 +112,21 @@ class Server(socketserver.StreamRequestHandler):
                         self.wfile.write(HELP_CREATE_POST)
                     else:
                         title = extracted.group(1)
-                        content = extracted.group(2)
+                        content = extracted.group(2).replace('<br>', '\r\n')
                         date = datetime.datetime.now(TIMEZONE)
-                        date = date.strftime("%Y-%m-%d %H:%M:%S")
-                        pid = posts.find({}, ['post_id'], sort={
-                                         'post_id': pymongo.DESCENDING}).limit(1)['post_id']
-                        posts.find_one_and_update(
-                            {'post_id': pid}, {'$inc': {'post_id': 1}})
+                        date = list(date.timetuple()[:3])
+                        pid = idx.find_one_and_update(
+                            {"type": "post_id"}, {'$inc': {'idx': 1}}, return_document=pymongo.ReturnDocument.AFTER)['idx']
+
                         posts.insert_one(
                             {'board_name': commands[1], 'title': title, 'content': content, 'owner': name, 'date': date, 'post_id': pid})
                         self.wfile.write(SUCESS_POST_CREATED)
             elif commands[0] == "list-board":
                 output = [b'\tIndex\tName\tModerator\r\n']
                 if len(commands) == 1:
-                    for idx, document in enumerate(boards.find({}, sort={"_id": pymongo.ASCENDING}), start=1):
+                    for idx, document in enumerate(boards.find({}, sort=[("_id", pymongo.ASCENDING)]), start=1):
                         output.append('\t{}\t{}\t{}\r\n'.format(
-                            idx, document['borad_name'], document['mod']).encode())
+                            idx, document['board_name'], document['mod']).encode())
                     self.wfile.writelines(output)
                 else:
                     extracted = re.match(r'.*##(.*)', recv_data)
@@ -171,19 +134,19 @@ class Server(socketserver.StreamRequestHandler):
                         self.wfile.write(HELP_LIST_BOARD)
                     else:
                         keyword = extracted.group(1)
-                        for idx, document in enumerate(boards.find({"board_name": {"$regex": ".*{}.*".format(keyword)}}, sort={"_id": pymongo.ASCENDING}), start=1):
+                        for idx, document in enumerate(boards.find({"board_name": {"$regex": ".*{}.*".format(keyword)}}, sort=[("_id", pymongo.ASCENDING)]), start=1):
                             output.append('\t{}\t{}\t{}\r\n'.format(
                                 idx, document['board_name'], document['mod']).encode())
                         self.wfile.writelines(output)
             elif commands[0] == "list-post":
                 output = [b'\tID\tTitle\tAuthor\tDate\r\n']
                 if len(commands) == 2:
-                    if boards.find({"board_name": commands[1]}) is None:
+                    if boards.find_one({"board_name": commands[1]}) is None:
                         self.wfile.write(FAIL_BOARD_NOT_EXISTS)
                     else:
-                        for document in posts.find({"board_name": commands[1]}, sort={"post_id": pymongo.ASCENDING}):
+                        for document in posts.find({"board_name": commands[1]}, sort=[("post_id", pymongo.ASCENDING)]):
                             output.append('\t{}\t{}\t{}\t{}\r\n'.format(
-                                document['post_id'], document['title'], document['owner'], document['date']).encode())
+                                document['post_id'], document['title'], document['owner'], '{}/{}'.format(*document['date'][1:])).encode())
                         self.wfile.writelines(output)
                 else:
                     extracted = re.match(r'list-post (.*) ##(.*)', recv_data)
@@ -193,7 +156,7 @@ class Server(socketserver.StreamRequestHandler):
                         self.wfile.write(FAIL_BOARD_NOT_EXISTS)
                     else:
                         keyword = extracted.group(2)
-                        for document in posts.find({"board_name": extracted.group(1), "title": {"$regex": keyword}}, sort={"post_id": pymongo.ASCENDING}):
+                        for document in posts.find({"board_name": extracted.group(1), "title": {"$regex": keyword}}, sort=[("post_id", pymongo.ASCENDING)]):
                             output.append('\t{}\t{}\t{}\t{}\r\n'.format(
                                 document['post_id'], document['title'], document['owner'], document['date']).encode())
                         self.wfile.writelines(output)
@@ -212,12 +175,13 @@ class Server(socketserver.StreamRequestHandler):
                         else:
                             comment = comments.find({"post_id": pid})
                             ctx = READ_POST_FORMAT.format(
-                                post['owner'], post['title'], post['date'], post['content'])
+                                post['owner'], post['title'], '{}-{}-{}'.format(*post['date']), post['content'])
                             cmt = []
                             if comment is not None:
                                 for c in comment:
-                                    cmt.append('{}\t:\t{}'.format(
+                                    cmt.append('{}: {}'.format(
                                         c['owner'], c['content']))
+                                cmt.append('')
                             self.wfile.write((ctx + '\r\n'.join(cmt)).encode())
             elif commands[0] == "delete-post":
                 if len(commands) != 2:
@@ -237,9 +201,33 @@ class Server(socketserver.StreamRequestHandler):
                             self.wfile.write(FAIL_NOT_OWNER)
                         else:
                             posts.delete_one({"post_id": pid})
+                            comments.delete_many({"post_id": pid})
                             self.wfile.write(SUCESS_POST_DELETED)
-            elif commands[0]:
-                pass
+            elif commands[0] == 'update-post':
+                if len(commands) < 4:
+                    self.wfile.write(HELP_UPDATE_POST)
+                elif name is None:
+                    self.wfile.write(FAIL_UNAUTHORIZED)
+                try:
+                    pid = int(commands[1])
+                except Exception:
+                    self.wfile.write(FAIL_POST_NOT_EXISTS)
+                post = posts.find_one({"post_id": pid})
+                if post is None:
+                    self.wfile.write(FAIL_POST_NOT_EXISTS)
+                else:
+                    if post['owner'] != name:
+                        self.wfile.write(FAIL_NOT_OWNER)
+                    elif "title" in recv_data:
+                        extracted = re.match(r'.*--title (.*)', recv_data)
+                        posts.find_one_and_update(
+                            {"post_id": pid}, {"$set": {"title": extracted.group(1)}})
+                        self.wfile.write(SUCESS_UPDATE_POST)
+                    elif "content" in recv_data:
+                        extracted = re.match(r'.*--content (.*)', recv_data)
+                        posts.find_one_and_update(
+                            {"post_id": pid}, {"$set": {"content": extracted.group(1).replace('<br>', '\r\n')}})
+                        self.wfile.write(SUCESS_UPDATE_POST)
             elif commands[0] == "comment":
                 if len(commands) < 3:
                     self.wfile.write(HELP_COMMENT)
@@ -255,8 +243,11 @@ class Server(socketserver.StreamRequestHandler):
                         if post is None:
                             self.wfile.write(FAIL_POST_NOT_EXISTS)
                         else:
+                            extracted = re.match(
+                                r'comment \d+ (.*)', recv_data)
+
                             comments.insert_one(
-                                {"post_id": pid, "owner": name, "content": commands[2]})
+                                {"post_id": pid, "owner": name, "content": extracted.group(1)})
                             self.wfile.write(SUCESS_COMMENT)
             else:
                 print(ERROR + " Unknown command:", commands)
@@ -269,8 +260,12 @@ def main():
         port = int(sys.argv[1])
     except IndexError:
         port = 5000
-    socketserver.ForkingTCPServer.allow_reuse_address = True
-    server = socketserver.ForkingTCPServer(("0.0.0.0", port), Server)
+    try:
+        default_server = socketserver.ForkingTCPServer
+    except AttributeError:
+        default_server = socketserver.ThreadingTCPServer
+    default_server.allow_reuse_address = True
+    server = default_server(("0.0.0.0", port), Server)
     print(COMPLETE + " Server is running on port", port)
     print(WAITING + " Waiting for connections.")
 
@@ -280,10 +275,16 @@ def main():
         print("\b\b" + WAITING + " Shutting down server.")
         server.shutdown()
         print(COMPLETE + " Server closed.")
-        #print(WAITING + " Cleaning up database.")
-        #client = pymongo.MongoClient()
-        # client['NP']['user'].drop()
-        #print(COMPLETE + " All table dropped.")
+        print(WAITING + " Cleaning up database.")
+        client = pymongo.MongoClient()
+        client['NP']['user'].drop()
+        client['NP']['board'].drop()
+        client['NP']['idx'].drop()
+        client['NP']['post'].drop()
+        client['NP']['comment'].drop()
+        idx = client['NP']['idx']
+        idx.insert_one({"type": "post_id", "idx": 0})
+        print(COMPLETE + " All table dropped.")
 
 
 if __name__ == '__main__':
