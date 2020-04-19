@@ -48,6 +48,10 @@ class PostManager(BBSManager):
         collection = self.connection['NP']['comment']
         collection.delete_many({"post_id": post_id})
 
+    def read(self, post_id):
+        collection = self.connection['NP']['post']
+        return collection.find_one({"post_id": post_id})
+
     def delete(self, document):
         collection = self.connection['NP']['post']
         result = collection.delete_one(document)

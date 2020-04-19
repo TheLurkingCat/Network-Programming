@@ -115,13 +115,13 @@ class Server(socketserver.StreamRequestHandler):
         if extracted is not None:
             keyword = extracted.group(1)
             document["title"] = {"$regex": keyword}
-            for doc in post.list_all(document):
-                output.append('\t{}\t{}\t{}\t{}/{}\r\n'.format(
-                    doc['post_id'],
-                    doc['title'],
-                    doc['owner'],
-                    *doc['date'][1:]).encode())
-            self.wfile.writelines(output)
+        for doc in post.list_all(document):
+            output.append('\t{}\t{}\t{}\t{02d}/{02d}\r\n'.format(
+                doc['post_id'],
+                doc['title'],
+                doc['owner'],
+                *doc['date'][1:]).encode())
+        self.wfile.writelines(output)
 
     def read(self, pid_string, post):
         try:
@@ -132,14 +132,15 @@ class Server(socketserver.StreamRequestHandler):
         if post.not_exist(postid):
             self.wfile.write(FAIL_POST_NOT_EXISTS)
         else:
+            document = post.read(postid)
             output = []
-            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{}-{}-{}\r\n".format(
-                post['owner'],
-                post['title'],
-                *post['date']
+            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{04d}-{02d}-{02d}\r\n".format(
+                document['owner'],
+                document['title'],
+                *document['date']
             )
             output.append(head)
-            body = "--\r\n{}\r\n--\r\n".format(post['content'])
+            body = "--\r\n{}\r\n--\r\n".format(document['content'])
             output.append(body)
             for comment in post.list_comment(postid):
                 output.append('{}: {}\r\n'.format(
