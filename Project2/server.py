@@ -89,7 +89,7 @@ class Server(socketserver.StreamRequestHandler):
             post.add_post(document)
             self.reply(SUCCESS_POST_CREATED)
 
-    def list_board(self, raw_command, board_name, board):
+    def list_board(self, raw_command, board):
         output = [b'\tIndex\tName\tModerator\r\n']
         extracted = extract_keyword(raw_command)
         document = {}
@@ -250,7 +250,7 @@ class Server(socketserver.StreamRequestHandler):
             elif commands[0] == "create-post":
                 self.create_post(raw_command, commands[1], user, board, post)
             elif commands[0] == "list-board":
-                self.list_board(raw_command, commands[1], board)
+                self.list_board(raw_command, board)
             elif commands[0] == "list-post":
                 self.list_post(raw_command, commands[1], board, post)
             elif commands[0] == "read":
