@@ -42,7 +42,7 @@ class PostManager(BBSManager):
     def list_comment(self, post_id):
         collection = self.connection['NP']['comment']
         # ASCENDING
-        return collection.find({post_id: post_id}, sort=[("_id", 1)])
+        return collection.find({"post_id": post_id}, sort=[("_id", 1)])
 
     def clean_comment(self, post_id):
         collection = self.connection['NP']['comment']
