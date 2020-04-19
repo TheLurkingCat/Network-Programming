@@ -75,15 +75,15 @@ class Server(socketserver.StreamRequestHandler):
         board_name = self.commands[1]
         if self.user.is_unauthorized():
             self.reply(FAIL_UNAUTHORIZED)
+            return
+        if self.board.not_exist(board_name):
+            document = {"board_name": board_name,
+                        "mod": self.user.whoami()
+                        }
+            self.board.add_board(document)
+            self.reply(SUCCESS_BOARD_CREATED)
         else:
-            if self.board.not_exist(board_name):
-                document = {"board_name": board_name,
-                            "mod": self.user.whoami()
-                            }
-                self.board.add_board(document)
-                self.reply(SUCCESS_BOARD_CREATED)
-            else:
-                self.reply(FAIL_BOARD_EXISTS)
+            self.reply(FAIL_BOARD_EXISTS)
 
     def create_post(self):
         board_name = self.commands[1]
@@ -151,51 +151,53 @@ class Server(socketserver.StreamRequestHandler):
             return
         if self.post.not_exist(postid):
             self.reply(FAIL_POST_NOT_EXISTS)
-        else:
-            document = self.post.read(postid)
-            output = []
-            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{:04d}-{:02d}-{:02d}\r\n".format(
-                document['owner'],
-                document['title'],
-                *document['date']
-            )
-            output.append(head)
-            body = "--\r\n{}\r\n--\r\n".format(document['content'])
-            output.append(body)
-            for comment in self.post.list_comment(postid):
-                output.append('{}: {}\r\n'.format(
-                    comment['owner'],
-                    comment['content']))
-            self.reply(''.join(output).encode())
+            return
+        document = self.post.read(postid)
+        output = []
+        head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{:04d}-{:02d}-{:02d}\r\n".format(
+            document['owner'],
+            document['title'],
+            *document['date']
+        )
+        output.append(head)
+        body = "--\r\n{}\r\n--\r\n".format(document['content'])
+        output.append(body)
+        for comment in self.post.list_comment(postid):
+            output.append('{}: {}\r\n'.format(
+                comment['owner'],
+                comment['content']))
+        self.reply(''.join(output).encode())
 
     def delete_post(self):
         if self.user.is_unauthorized():
             self.reply(FAIL_UNAUTHORIZED)
-        else:
-            try:
-                postid = int(self.commands[1])
-            except ValueError:
-                self.reply(FAIL_POST_NOT_EXISTS)
-                return
-            if self.post.not_exist(postid):
-                self.reply(FAIL_POST_NOT_EXISTS)
-                return
-            document = {
-                "post_id": postid,
-                "owner": self.user.whoami()
-            }
-            if self.post.delete(document):
-                self.reply(SUCCESS_POST_DELETED)
-            else:
-                self.reply(FAIL_NOT_OWNER)
-
-    def update_post(self):
-        if self.user.is_unauthorized():
-            self.reply(FAIL_UNAUTHORIZED)
+            return
         try:
             postid = int(self.commands[1])
         except ValueError:
             self.reply(FAIL_POST_NOT_EXISTS)
+            return
+        if self.post.not_exist(postid):
+            self.reply(FAIL_POST_NOT_EXISTS)
+            return
+        document = {
+            "post_id": postid,
+            "owner": self.user.whoami()
+        }
+        if self.post.delete(document):
+            self.reply(SUCCESS_POST_DELETED)
+        else:
+            self.reply(FAIL_NOT_OWNER)
+
+    def update_post(self):
+        if self.user.is_unauthorized():
+            self.reply(FAIL_UNAUTHORIZED)
+            return
+        try:
+            postid = int(self.commands[1])
+        except ValueError:
+            self.reply(FAIL_POST_NOT_EXISTS)
+            return
         if self.post.not_exist(postid):
             self.reply(FAIL_POST_NOT_EXISTS)
             return
