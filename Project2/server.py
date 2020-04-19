@@ -211,7 +211,7 @@ class Server(socketserver.StreamRequestHandler):
             document = {"post_id": postid,
                         "owner": user.whoami(),
                         "content": comment.group(1)}
-            post.add_comment(document)
+            post.comment(document)
             self.reply(SUCCESS_COMMENT)
 
     def handle(self):
@@ -261,7 +261,7 @@ class Server(socketserver.StreamRequestHandler):
             elif commands[0] == 'update-post':
                 self.update_post(raw_command, commands[1], post, user)
             elif commands[0] == "comment":
-                self.comment(raw_command, commands[1], post,  user)
+                self.comment(raw_command, commands[1], post, user)
             elif commands[0] == "exit":
                 print(OFFLINE.format(*self.client_address))
                 break
