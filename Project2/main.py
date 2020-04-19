@@ -33,7 +33,8 @@ def main():
         client = pymongo.MongoClient()
         client['NP']['user'].drop()
         client['NP']['board'].drop()
-        client['NP']['seq_num'].update_one({}, {"$set": {"id": 1}})
+        client['NP']['seq_num'].update_one(
+            {}, {"$set": {"id": 1}}, upsert=True)
         client['NP']['post'].drop()
         client['NP']['comment'].drop()
         complete("All table reset.")
