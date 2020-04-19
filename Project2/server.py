@@ -116,7 +116,7 @@ class Server(socketserver.StreamRequestHandler):
             keyword = extracted.group(1)
             document["title"] = {"$regex": keyword}
         for doc in post.list_all(document):
-            output.append('\t{}\t{}\t{}\t{02d}/{02d}\r\n'.format(
+            output.append('\t{}\t{}\t{}\t{:02d}/{:02d}\r\n'.format(
                 doc['post_id'],
                 doc['title'],
                 doc['owner'],
@@ -134,7 +134,7 @@ class Server(socketserver.StreamRequestHandler):
         else:
             document = post.read(postid)
             output = []
-            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{04d}-{02d}-{02d}\r\n".format(
+            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{:04d}-{:02d}-{:02d}\r\n".format(
                 document['owner'],
                 document['title'],
                 *document['date']
