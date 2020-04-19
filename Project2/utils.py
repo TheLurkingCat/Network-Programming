@@ -67,15 +67,15 @@ def extract_post(string):
 
 
 def extract_keyword(string):
-    return EXTRACT_KEYWORD(string)
+    return EXTRACT_KEYWORD.match(string)
 
 
 def extract_title_content(string):
-    return EXTRACT_TITLE(string), EXTRACT_CONTENT(string)
+    return EXTRACT_TITLE.match(string), EXTRACT_CONTENT.match(string)
 
 
 def extract_comment(string):
-    return EXTRACT_COMMENT(string)
+    return EXTRACT_COMMENT.match(string)
 
 
 def apply_backspace(string):
