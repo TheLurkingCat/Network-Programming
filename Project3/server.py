@@ -300,12 +300,12 @@ class Server(socketserver.StreamRequestHandler):
             self.commands = self.raw_command.split()
             if not self.commands:
                 continue
-            del self.commands[0]
 
             if self.commands[0] == "exit":
                 print(OFFLINE.format(*self.client_address))
                 break
             func = self.function.get(self.commands[0])
+            del self.commands[0]
             if func is None:
                 error("Unknown command:", self.commands)
             else:
