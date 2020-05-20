@@ -36,4 +36,4 @@ class User:
         doc = collection.find_one({"username": username})
         if doc is None:
             return None
-        return doc['bucket_name']
+        return doc['bucket']

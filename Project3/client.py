@@ -1,22 +1,27 @@
 import socket
-from io import BytesIO
-from json import dumps, loads
-from struct import pack, unpack
+from json import loads
+from json.decoder import JSONDecodeError
+from struct import error, pack, unpack
 from sys import argv
 
 import boto3
 
 
-def recv_all(sock):
-    length = unpack('<H', sock.recv(2))[0]
-    return sock.recv(length).decode()
+def recv_all(s):
+    try:
+        length = unpack('<H', s.recv(2))[0]
+    except error:
+        s.shutdown(socket.SHUT_RDWR)
+        s.close()
+        exit(1)
+    return s.recv(length).decode()
 
 
-def send(sock, data):
+def send(s, data):
     if isinstance(data, str):
         data = data.encode()
     length = pack('<H', len(data))
-    sock.sendall(length + data)
+    s.sendall(length + data)
 
 
 if __name__ == '__main__' and (len(argv) == 3):
@@ -32,7 +37,10 @@ if __name__ == '__main__' and (len(argv) == 3):
             send(sock, command)
             if command == 'exit':
                 break
-            reply = loads(recv_all(sock))
+            try:
+                reply = loads(recv_all(sock))
+            except JSONDecodeError:
+                continue
             print(reply['msg'])
             # print(reply)
             if reply.get('success', False):
