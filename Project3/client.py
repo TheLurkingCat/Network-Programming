@@ -1,9 +1,10 @@
 import socket
-from json import dumps, loads
-from struct import unpack, pack
-from sys import argv
-import boto3
 from io import BytesIO
+from json import dumps, loads
+from struct import pack, unpack
+from sys import argv
+
+import boto3
 
 
 def recv_all(sock):
@@ -62,10 +63,9 @@ if __name__ == '__main__' and (len(argv) == 3):
                         Bucket=bucket_name,
                         Key=str(pid)
                     )
-                    print('-' * 20)
+                    print('--')
                     print(content['Body'].read().decode())
-                    if cmts:
-                        print('-' * 20)
+                    print('--')
                     for bucket, key, own in cmts:
                         cmt = client.get_object(
                             Bucket=bucket,

@@ -1,8 +1,8 @@
 import datetime
 import socket
 import socketserver
+import struct
 from json import dumps
-from struct import pack, unpack
 from time import time
 
 import pymongo
@@ -37,10 +37,13 @@ class Server(socketserver.StreamRequestHandler):
             response = dumps(response)
         if isinstance(response, str):
             response = response.encode()
-        self.wfile.write(pack('<H', len(response)) + response)
+        self.wfile.write(struct.pack('<H', len(response)) + response)
 
     def recv_command(self):
-        length = unpack('<H', self.rfile.read(2))[0]
+        try:
+            length = struct.unpack('<H', self.rfile.read(2))[0]
+        except struct.error:
+            return "exit"
         return self.rfile.read(length).decode()
 
     def register(self):
@@ -167,12 +170,12 @@ class Server(socketserver.StreamRequestHandler):
         if extracted is not None:
             keyword = extracted.group(1)
             document["title"] = {"$regex": keyword}
-            for doc in self.post.list_all(document):
-                output.append('\t{}\t{}\t{}\t{}/{}'.format(
-                    doc['post_id'],
-                    doc['title'],
-                    doc['owner'],
-                    *doc['date'][1:]))
+        for doc in self.post.list_all(document):
+            output.append('\t{}\t{}\t{}\t{}/{}'.format(
+                doc['post_id'],
+                doc['title'],
+                doc['owner'],
+                *doc['date'][1:]))
         self.reply({"msg": '\n'.join(output)})
 
     def read(self):
@@ -251,11 +254,17 @@ class Server(socketserver.StreamRequestHandler):
                     else:
                         ret['msg'] = "Not the post owner."
                 else:
-                    ret['bucket_name'] = self.user.bucket_name
-                    ret['msg'] = "Update successfully."
-                    ret['success'] = True
-                    ret['content'] = content.group(1).replace('<br>', '\r\n')
-                    ret['id'] = postid
+                    try:
+                        next(self.post.list_all(document))
+                    except StopIteration:
+                        ret['msg'] = "Not the post owner."
+                    else:
+                        ret['bucket_name'] = self.user.bucket_name
+                        ret['msg'] = "Update successfully."
+                        ret['success'] = True
+                        ret['content'] = content.group(
+                            1).replace('<br>', '\r\n')
+                        ret['id'] = postid
 
         self.reply(ret)
 
