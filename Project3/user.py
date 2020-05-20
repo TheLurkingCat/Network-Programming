@@ -30,3 +30,10 @@ class User:
     def logout(self):
         self.bucket_name = None
         self.username = None
+
+    def get_bucket(self, username):
+        collection = self.connection['NP']['user']
+        doc = collection.find_one({"username": username})
+        if doc is None:
+            return None
+        return doc['bucket_name']

@@ -19,6 +19,8 @@ TIMEZONE = datetime.timezone(datetime.timedelta(hours=8))
 EXTRACT_NEW_POST_FORMAT = re.compile(r'.*--title (.*) --content (.*)')
 EXTRACT_KEYWORD = re.compile(r'.*##(.*)')
 EXTRACT_TITLE = re.compile(r'.*--title (.*)')
+
+EXTRACT_MAIL = re.compile(r'.*--subject (.*) --content (.*)')
 EXTRACT_CONTENT = re.compile(r'.*--content (.*)')
 EXTRACT_COMMENT = re.compile(r'comment \d+ (.*)')
 
@@ -49,3 +51,7 @@ def extract_title_content(string):
 
 def extract_comment(string):
     return EXTRACT_COMMENT.match(string)
+
+
+def extract_mail(string):
+    return EXTRACT_MAIL.match(string)

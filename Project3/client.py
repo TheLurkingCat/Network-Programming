@@ -100,6 +100,39 @@ if __name__ == '__main__' and (len(argv) == 3):
                         Bucket=bucket_name,
                         Key=str(pid) + key
                     )
+                elif reply['type'] == 'mailto':
+                    bucket_name = reply['bucket_name']
+                    content = reply['content']
+                    k = reply['key']
+                    client.put_object(
+                        ACL='private',
+                        Body=content.encode(),
+                        Bucket=bucket_name,
+                        Key=k
+                    )
+                elif reply['type'] == 'retrieve_mail':
+                    bucket_name = reply['bucket_name']
+                    subject = reply['subject']
+                    author = reply['from']
+                    date = reply['date']
+                    k = reply['key']
+                    print("Subject :", subject)
+                    print("From :", author)
+                    print("Date :", date)
+                    print("--")
+                    content = client.get_object(
+                        Bucket=bucket_name,
+                        Key=k
+                    )
+                    print(content['Body'].read().decode())
+
+                elif reply['type'] == 'delete_mail':
+                    bucket_name = reply['bucket_name']
+                    k = reply['key']
+                    client.delete_object(
+                        Bucket=bucket_name,
+                        Key=k
+                    )
 
     except KeyboardInterrupt:
         send(sock, "exit")

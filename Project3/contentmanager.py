@@ -1,3 +1,6 @@
+from pymongo import ReturnDocument
+
+
 class BBSManager:
     def __init__(self, connection):
         self.connection = connection
@@ -20,7 +23,13 @@ class BoardManager(BBSManager):
 class PostManager(BBSManager):
     def next_sequence_id(self):
         collection = self.connection['NP']['seq_num']
-        document = collection.find_one_and_update({}, {'$inc': {'id': 1}})
+        document = collection.find_one_and_update(
+            {},
+            {'$inc': {'id': 1}},
+            projection={'id': True, '_id': False},
+            upsert=True,
+            return_document=ReturnDocument.AFTER
+        )
         return document['id']
 
     def not_exist(self, postid):
@@ -66,3 +75,43 @@ class PostManager(BBSManager):
     def comment(self, document):
         collection = self.connection['NP']['comment']
         collection.insert_one(document)
+
+
+class MailManager(BBSManager):
+    def next_sequence_id(self, username):
+        collection = self.connection['NP']['mail_seq_num']
+        document = collection.find_one_and_update(
+            {'username': username},
+            {'$inc': {'id': 1},
+             '$setOnInsert': {'username': username}
+             },
+            projection={'id': True, '_id': False},
+            upsert=True,
+            return_document=ReturnDocument.AFTER)
+
+        return document['id']
+
+    def mailto(self, sender, username, subject, date):
+        collection = self.connection['NP']['mail']
+        seq = self.next_sequence_id(username)
+        collection.insert_one({
+            "from": sender,
+            "to": username,
+            "subject": subject,
+            "date": date,
+            "id": seq
+        })
+        return seq
+
+    def list_all(self, username):
+        collection = self.connection['NP']['mail']
+        return collection.find({"to": username}, sort=[("id", 1)])
+
+    def exist(self, name, num):
+        collection = self.connection['NP']['mail']
+        return collection.find_one({"id": num, 'to': name}, {"_id": 1})
+
+    def delete(self, name, num):
+        collection = self.connection['NP']['mail']
+        result = collection.delete_one({"id": num, 'to': name})
+        return bool(result.deleted_count)

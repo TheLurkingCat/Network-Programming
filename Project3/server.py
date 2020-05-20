@@ -7,7 +7,7 @@ from time import time
 
 import pymongo
 
-from contentmanager import BoardManager, PostManager
+from contentmanager import BoardManager, MailManager, PostManager
 from user import User
 from utils import *
 
@@ -26,6 +26,10 @@ class Server(socketserver.StreamRequestHandler):
             "read": self.read,
             "delete-post": self.delete_post,
             "update-post": self.update_post,
+            "mail-to": self.mailto,
+            "list-mail": self.listmail,
+            "retr-mail": self.retrieve_mail,
+            "delete-mail": self.delete_mail,
             "comment": self.comment
         }
         super().__init__(*args)
@@ -42,7 +46,7 @@ class Server(socketserver.StreamRequestHandler):
     def recv_command(self):
         try:
             length = struct.unpack('<H', self.rfile.read(2))[0]
-        except struct.error:
+        except (struct.error, OSError):
             return "exit"
         return self.rfile.read(length).decode()
 
@@ -272,7 +276,8 @@ class Server(socketserver.StreamRequestHandler):
         ret = {
             "type": "comment",
             "bucket_name": None,
-            "success": False}
+            "success": False
+        }
         if self.user.is_unauthorized():
             ret['msg'] = "Please login first."
         else:
@@ -296,6 +301,89 @@ class Server(socketserver.StreamRequestHandler):
                     ret['key'] = '_' + t
         self.reply(ret)
 
+    def mailto(self):
+        ret = {
+            "type": "mailto",
+            "bucket_name": None,
+            "success": False
+        }
+        username = self.commands[0]
+        extracted = extract_mail(self.raw_command)
+        subject = extracted.group(1)
+        content = extracted.group(2).replace('<br>', '\r\n')
+
+        date = list(datetime.datetime.now(TIMEZONE).timetuple()[:3])
+        if self.user.is_unauthorized():
+            ret['msg'] = "Please login first."
+        else:
+            bkt_name = self.user.get_bucket(username)
+            if bkt_name is None:
+                ret['msg'] = username + " does not exist."
+            else:
+                seq = self.mail.mailto(
+                    self.user.username, username, subject, date)
+                ret['msg'] = "Sent successfully."
+                ret['bucket_name'] = bkt_name
+                ret['content'] = content
+                ret['key'] = 'mail_' + str(seq)
+
+    def listmail(self):
+        if self.user.is_unauthorized():
+            self.reply({'msg': "Please login first."})
+        else:
+            out = ["ID\tSubject\tFrom\tDate"]
+            mails = self.mail.list_all(self.user.username)
+            for mail in mails:
+                out.append('{}\t{}\t{}\t{}/{}'.format(
+                    mail['id'],
+                    mail['subject'],
+                    mail['from'],
+                    *mail['date'][1:]
+                ))
+            self.reply({'msg': '\n'.join(out)})
+
+    def retrieve_mail(self):
+        mail_num = int(self.commands[0])
+        ret = {
+            "type": "retrieve_mail",
+            "bucket_name": None,
+            "success": False
+        }
+        if self.user.is_unauthorized():
+            ret['msg'] = "Please login first."
+        else:
+            mail_metadata = self.mail.exist(self.user.username, mail_num)
+            if mail_metadata is None:
+                ret['msg'] = "No such mail."
+            else:
+                ret['bucket_name'] = self.user.bucket_name
+                ret['success'] = True
+                ret['subject'] = mail_metadata['subject']
+                ret['from'] = mail_metadata['from']
+                ret['date'] = '{}-{}-{}'.format(*mail_metadata['date'])
+                ret['key'] = "mail_" + str(mail_num)
+        self.reply(ret)
+
+    def delete_mail(self):
+        mail_num = int(self.commands[0])
+        ret = {
+            "type": "delete_mail",
+            "bucket_name": None,
+            "success": False
+        }
+        if self.user.is_unauthorized():
+            ret['msg'] = "Please login first."
+        else:
+            isdeleted = self.mail.delete(self.user.username, mail_num)
+            if isdeleted:
+                ret['bucket_name'] = self.user.bucket_name
+                ret['success'] = True
+                ret['key'] = 'mail_' + str(mail_num)
+            else:
+                ret['msg'] = "No such mail."
+
+        self.reply(ret)
+
     def handle(self):
         print("New connection.")
         print(ONLINE.format(*self.client_address))
@@ -304,6 +392,7 @@ class Server(socketserver.StreamRequestHandler):
         self.user = User(mongoclient)
         self.board = BoardManager(mongoclient)
         self.post = PostManager(mongoclient)
+        self.mail = MailManager(mongoclient)
         while True:
             self.raw_command = self.recv_command()
             self.commands = self.raw_command.split()
@@ -317,6 +406,7 @@ class Server(socketserver.StreamRequestHandler):
             del self.commands[0]
             if func is None:
                 error("Unknown command:", self.commands)
+                self.reply('')
             else:
                 func()
 
