@@ -311,7 +311,6 @@ class Server(socketserver.StreamRequestHandler):
         extracted = extract_mail(self.raw_command)
         subject = extracted.group(1)
         content = extracted.group(2).replace('<br>', '\r\n')
-
         date = list(datetime.datetime.now(TIMEZONE).timetuple()[:3])
         if self.user.is_unauthorized():
             ret['msg'] = "Please login first."
@@ -323,9 +322,11 @@ class Server(socketserver.StreamRequestHandler):
                 seq = self.mail.mailto(
                     self.user.username, username, subject, date)
                 ret['msg'] = "Sent successfully."
+                ret['success'] = True
                 ret['bucket_name'] = bkt_name
                 ret['content'] = content
                 ret['key'] = 'mail_' + str(seq)
+        self.reply(ret)
 
     def listmail(self):
         if self.user.is_unauthorized():
@@ -333,9 +334,9 @@ class Server(socketserver.StreamRequestHandler):
         else:
             out = ["ID\tSubject\tFrom\tDate"]
             mails = self.mail.list_all(self.user.username)
-            for mail in mails:
+            for idx, mail in enumerate(mails, start=1):
                 out.append('{}\t{}\t{}\t{}/{}'.format(
-                    mail['id'],
+                    idx,
                     mail['subject'],
                     mail['from'],
                     *mail['date'][1:]
@@ -358,7 +359,7 @@ class Server(socketserver.StreamRequestHandler):
             else:
                 ret['bucket_name'] = self.user.bucket_name
                 ret['success'] = True
-                ret['subject'] = mail_metadata['subject']
+                ret['msg'] = 'Subject :' + mail_metadata['subject']
                 ret['from'] = mail_metadata['from']
                 ret['date'] = '{}-{}-{}'.format(*mail_metadata['date'])
                 ret['key'] = "mail_" + str(mail_num)
@@ -379,6 +380,7 @@ class Server(socketserver.StreamRequestHandler):
                 ret['bucket_name'] = self.user.bucket_name
                 ret['success'] = True
                 ret['key'] = 'mail_' + str(mail_num)
+                ret['msg'] = 'Mail deleted.'
             else:
                 ret['msg'] = "No such mail."
 

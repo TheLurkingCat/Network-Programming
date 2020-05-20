@@ -36,6 +36,8 @@ def main():
         client['NP']['board'].drop()
         client['NP']['seq_num'].drop()
         client['NP']['post'].drop()
+        client['NP']['mail_seq_num'].drop()
+        client['NP']['mail'].drop()
         client['NP']['comment'].drop()
         complete("All table reset.")
         waiting("Resetting Amazon S3.")

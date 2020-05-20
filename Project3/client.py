@@ -50,7 +50,6 @@ if __name__ == '__main__' and (len(argv) == 3):
                         ACL='private',
                         Bucket=bucket_name,
                     )
-                    print(responce)
                 elif reply['type'] == 'login':
                     pass
                 elif reply['type'] == 'create_post':
@@ -120,11 +119,9 @@ if __name__ == '__main__' and (len(argv) == 3):
                     )
                 elif reply['type'] == 'retrieve_mail':
                     bucket_name = reply['bucket_name']
-                    subject = reply['subject']
                     author = reply['from']
                     date = reply['date']
                     k = reply['key']
-                    print("Subject :", subject)
                     print("From :", author)
                     print("Date :", date)
                     print("--")

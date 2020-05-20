@@ -109,7 +109,7 @@ class MailManager(BBSManager):
 
     def exist(self, name, num):
         collection = self.connection['NP']['mail']
-        return collection.find_one({"id": num, 'to': name}, {"_id": 1})
+        return collection.find_one({"id": num, 'to': name})
 
     def delete(self, name, num):
         collection = self.connection['NP']['mail']
