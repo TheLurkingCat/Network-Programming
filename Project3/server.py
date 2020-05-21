@@ -148,7 +148,7 @@ class Server(socketserver.StreamRequestHandler):
         self.reply(ret)
 
     def list_board(self):
-        output = ['\tIndex\tName\tModerator']
+        output = ['Index\tName\tModerator']
         extracted = extract_keyword(self.raw_command)
         document = {}
         if extracted is not None:
@@ -156,7 +156,7 @@ class Server(socketserver.StreamRequestHandler):
             document["board_name"] = {"$regex": keyword}
 
         for idx, doc in enumerate(self.board.list_all(document), start=1):
-            output.append('\t{}\t{}\t{}'.format(
+            output.append('{}\t{}\t{}'.format(
                 idx,
                 doc['board_name'],
                 doc['mod']))
@@ -168,14 +168,14 @@ class Server(socketserver.StreamRequestHandler):
         if self.board.not_exist(board_name):
             self.reply({"msg": "Board does not exist."})
             return
-        output = ['\tID\tTitle\tAuthor\tDate']
+        output = ['ID\tTitle\tAuthor\tDate']
         extracted = extract_keyword(self.raw_command)
         document = {"board_name": board_name}
         if extracted is not None:
             keyword = extracted.group(1)
             document["title"] = {"$regex": keyword}
         for doc in self.post.list_all(document):
-            output.append('\t{}\t{}\t{}\t{}/{}'.format(
+            output.append('{}\t{}\t{}\t{:02d}/{:02d}'.format(
                 doc['post_id'],
                 doc['title'],
                 doc['owner'],
@@ -193,7 +193,7 @@ class Server(socketserver.StreamRequestHandler):
         else:
             doc = self.post.read(postid)
             cmts = []
-            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{}-{}-{}".format(
+            head = "Author\t:{}\r\nTitle\t:{}\r\nDate\t:{:04d}-{:02d}-{:02d}".format(
                 doc['owner'],
                 doc['title'],
                 *doc['date']
@@ -225,10 +225,12 @@ class Server(socketserver.StreamRequestHandler):
                     "post_id": postid,
                     "owner": self.user.username
                 }
-                if self.post.delete(document):
+                delete_result = self.post.delete(document)
+                if delete_result[0]:
                     ret['bucket_name'] = self.user.bucket_name
                     ret['success'] = True
                     ret['id'] = postid
+                    ret['comments'] = delete_result[1]
                     ret['msg'] = "Delete successfully."
                 else:
                     ret['msg'] = "Not the post owner."
@@ -335,7 +337,7 @@ class Server(socketserver.StreamRequestHandler):
             out = ["ID\tSubject\tFrom\tDate"]
             mails = self.mail.list_all(self.user.username)
             for idx, mail in enumerate(mails, start=1):
-                out.append('{}\t{}\t{}\t{}/{}'.format(
+                out.append('{}\t{}\t{}\t{:02d}/{:02d}'.format(
                     idx,
                     mail['subject'],
                     mail['from'],
@@ -361,7 +363,8 @@ class Server(socketserver.StreamRequestHandler):
                 ret['success'] = True
                 ret['msg'] = 'Subject :' + mail_metadata['subject']
                 ret['from'] = mail_metadata['from']
-                ret['date'] = '{}-{}-{}'.format(*mail_metadata['date'])
+                ret['date'] = '{:04d}-{:02d}-{:02d}'.format(
+                    *mail_metadata['date'])
                 ret['key'] = "mail_" + str(mail_num)
         self.reply(ret)
 

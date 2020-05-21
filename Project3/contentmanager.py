@@ -53,7 +53,10 @@ class PostManager(BBSManager):
 
     def clean_comment(self, post_id):
         collection = self.connection['NP']['comment']
+        deleted = list(collection.find({"post_id": post_id}, {
+            'bucket_name': True, 'key': True}))
         collection.delete_many({"post_id": post_id})
+        return deleted
 
     def read(self, post_id):
         collection = self.connection['NP']['post']
@@ -63,9 +66,9 @@ class PostManager(BBSManager):
         collection = self.connection['NP']['post']
         result = collection.delete_one(document)
         if result.deleted_count:
-            self.clean_comment(document['post_id'])
-            return True
-        return False
+            r = self.clean_comment(document['post_id'])
+            return True, r
+        return False, []
 
     def update(self, document, modified):
         collection = self.connection['NP']['post']

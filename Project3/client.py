@@ -42,7 +42,6 @@ if __name__ == '__main__' and (len(argv) == 3):
             except JSONDecodeError:
                 continue
             print(reply['msg'])
-            # print(reply)
             if reply.get('success', False):
                 if reply['type'] == 'register':
                     bucket_name = reply['bucket_name']
@@ -82,10 +81,17 @@ if __name__ == '__main__' and (len(argv) == 3):
                             own, cmt['Body'].read().decode()))
                 elif reply['type'] == 'delete_post':
                     bucket_name = reply['bucket_name']
+                    comment = reply['comments']
                     pid = reply['id']
                     client.delete_object(
                         Bucket=bucket_name,
                         Key=str(pid))
+                    for cmt in comment:
+                        client.delete_object(
+                            Bucket=cmt['bucket_name'],
+                            Key=cmt['key']
+                        )
+
                 elif reply['type'] == 'update_post':
                     bucket_name = reply['bucket_name']
                     content = reply['content']
