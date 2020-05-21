@@ -54,7 +54,7 @@ class PostManager(BBSManager):
     def clean_comment(self, post_id):
         collection = self.connection['NP']['comment']
         deleted = list(collection.find({"post_id": post_id}, {
-            'bucket_name': True, 'key': True}))
+            'bucket_name': True, 'key': True, "_id": False}))
         collection.delete_many({"post_id": post_id})
         return deleted
 
