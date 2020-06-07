@@ -1,18 +1,23 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 import datetime
 import socket
 import socketserver
 import struct
 import sys
+import threading
+from collections import defaultdict
 from queue import Queue
 from time import sleep
+
 import pymongo
-from contentmanager import BoardManager, PostManager
+from asciitree import LeftAligned
+
+from contentmanager import BoardManager, PostManager, SubscribeManager
 from user import User
 from utils import *
 
 subscribe_data = {}
-online_user = {}
+online_user = set()
 
 
 class Server(socketserver.StreamRequestHandler):
@@ -29,8 +34,12 @@ class Server(socketserver.StreamRequestHandler):
             "read": self.read,
             "delete-post": self.delete_post,
             "update-post": self.update_post,
-            "comment": self.comment
+            "comment": self.comment,
+            "subscribe": self.subscribe,
+            "unsubscribe": self.unsubscribe,
+            "list-sub": self.list_sub
         }
+        self.tree_format = LeftAligned()
         super().__init__(*args)
 
     def check_self(self):
@@ -42,7 +51,8 @@ class Server(socketserver.StreamRequestHandler):
                 if subscribe_data[username].empty():
                     sleep(0.1)
                 else:
-                    self.reply(subscribe_data[username].get())
+                    message = subscribe_data[username].get()
+                    self.reply("*** {}在{}發表了標題為{}的文章 ***", *message)
 
     def reply(self, response, *args):
         if args:
@@ -50,7 +60,8 @@ class Server(socketserver.StreamRequestHandler):
         if isinstance(response, str):
             response = response.encode()
         if not isinstance(response, bytes):
-            raise ValueError("Not bytes")
+            raise ValueError(
+                "Expected bytes, but get {}".format(type(response)))
         self.wfile.write(struct.pack('<H', len(response)) + response)
 
     def recv_command(self):
@@ -60,6 +71,7 @@ class Server(socketserver.StreamRequestHandler):
             return "exit"
         return self.rfile.read(length).decode()
 
+    @fallback
     def register(self):
         username = self.commands[0]
         password = self.commands[2]
@@ -68,79 +80,85 @@ class Server(socketserver.StreamRequestHandler):
         else:
             self.reply(b"Username is already used.")
 
+    @fallback
     def login(self):
         if self.user.is_unauthorized():
             username, password = self.commands
             if self.user.login(username, password):
                 self.reply("Welcome, {}.", username)
-                if username in online_user:
-                    online_user[username] += 1
-                else:
-                    online_user[username] = 1
-                    subscribe_data[username] = Queue()
+                online_user.add(username)
+                subscribe_data[username] = Queue()
             else:
                 self.reply(b"Login failed.")
         else:
             self.reply(b"Please logout first.")
 
+    @fallback
+    @login_required
     def logout(self):
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-        else:
-            username = self.user.whoami()
-            self.user.logout()
-            if online_user[username] == 1:
-                del online_user[username]
-                del subscribe_data[username]
-            else:
-                online_user[username] -= 1
-            self.reply("Bye, {}.", self.user.whoami())
+        username = self.user.whoami()
+        self.user.logout()
+        online_user.remove(username)
+        del subscribe_data[username]
+        self.reply("Bye, {}.", username)
 
+    @fallback
+    @login_required
     def whoami(self):
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-        else:
-            self.reply(self.user.whoami())
+        self.reply(self.user.whoami())
 
+    @fallback
+    @login_required
+    @board_existance(False)
     def create_board(self):
         board_name = self.commands[0]
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-        elif self.board.not_exist(board_name):
-            document = {
-                "board_name": board_name,
-                "mod": self.user.whoami()
-            }
-            self.board.add_board(document)
-            self.reply(b"Create board successfully.")
-        else:
-            self.reply(b"Board already exist.")
+        document = {
+            "board_name": board_name,
+            "mod": self.user.whoami()
+        }
+        self.board.add_board(document)
+        self.reply(b"Create board successfully.")
 
+    @fallback
+    @login_required
+    @board_existance(True)
     def create_post(self):
         board_name = self.commands[0]
-        extracted = extract_post(self.raw_command)
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-        elif self.board.not_exist(board_name):
-            self.reply(b"Board does not exist.")
-        else:
-            title = extracted.group(1)
-            content = extracted.group(2).replace('<br>', '\r\n')
-            date = list(datetime.datetime.now(TIMEZONE).timetuple()[:3])
-            document = {
-                'board_name': board_name,
-                'title': title,
-                'content': content,
-                'owner': self.user.whoami(),
-                'date': date,
-                'post_id': None
-            }
-            self.post.add_post(document)
-            self.reply(b"Create post successfully")
+        extracted = NEWPOST.match(self.raw_command)
+        title = extracted.group(1)
+        content = extracted.group(2).replace('<br>', '\r\n')
+        date = list(datetime.datetime.now(TIMEZONE).timetuple()[:3])
+        document = {
+            'board_name': board_name,
+            'title': title,
+            'content': content,
+            'owner': self.user.whoami(),
+            'date': date,
+            'post_id': None
+        }
+        boards, authors = self.sub.find_subscriber(
+            board_name, self.user.whoami())
+        note = set()
+        message = (
+            self.user.whoami(),
+            board_name,
+            title
+        )
+        for doc in boards:
+            if doc['user'] in online_user and doc['keyword'] in title:
+                note.add((doc['user'], message))
+        for doc in authors:
+            if doc['user'] in online_user and doc['keyword'] in title:
+                note.add((doc['user'], message))
+        for data in note:
+            subscribe_data[data[0]].put(data[1])
+        self.post.add_post(document)
+        self.reply(b"Create post successfully")
 
+    @fallback
     def list_board(self):
         output = ['Index\tName\tModerator']
-        extracted = extract_keyword(self.raw_command)
+        extracted = KEYWORD.match(self.raw_command)
         document = {}
         if extracted is not None:
             keyword = extracted.group(1)
@@ -154,13 +172,12 @@ class Server(socketserver.StreamRequestHandler):
             ))
         self.reply('\r\n'.join(output))
 
+    @fallback
+    @board_existance(True)
     def list_post(self):
         board_name = self.commands[0]
-        if self.board.not_exist(board_name):
-            self.reply(b"Board does not exist.")
-            return
         output = ['ID\tTitle\tAuthor\tDate']
-        extracted = extract_keyword(self.raw_command)
+        extracted = KEYWORD.match(self.raw_command)
         document = {"board_name": board_name}
         if extracted is not None:
             keyword = extracted.group(1)
@@ -175,17 +192,12 @@ class Server(socketserver.StreamRequestHandler):
             ))
         self.reply('\r\n'.join(output))
 
+    @fallback
+    @parameter_check(1)
+    @post_existance
     def read(self):
-        try:
-            postid = int(self.commands[0])
-        except Exception:
-            self.reply(b"Post does not exist.")
-            return
-
-        if self.post.not_exist(postid):
-            self.reply(b"Post does not exist.")
-            return
-
+        """Usage: read <postid>"""
+        postid = int(self.commands[0])
         document = self.post.read(postid)
         output = []
         head = "Author: {}\r\nTitle:  {}\r\nDate:   {:04d}-{:02d}-{:02d}".format(
@@ -203,19 +215,13 @@ class Server(socketserver.StreamRequestHandler):
             ))
         self.reply('\r\n'.join(output))
 
+    @fallback
+    @parameter_check(1)
+    @login_required
+    @post_existance
     def delete_post(self):
-        if self.user.is_unauthorized():
-            self.reply("Please login first.")
-            return
-        try:
-            postid = int(self.commands[0])
-        except Exception:
-            self.reply(b"Post does not exist.")
-            return
-        if self.post.not_exist(postid):
-            self.reply(b"Post does not exist.")
-            return
-
+        """Usage: delete-post <post-id>"""
+        postid = int(self.commands[0])
         document = {
             "post_id": postid,
             "owner": self.user.whoami()
@@ -226,20 +232,13 @@ class Server(socketserver.StreamRequestHandler):
         else:
             self.reply(b"Not the post owner.")
 
+    @fallback
+    @login_required
+    @post_existance
     def update_post(self):
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-            return
-        try:
-            postid = int(self.commands[0])
-        except Exception:
-            self.reply(b"Post does not exist.")
-            return
-        if self.post.not_exist(postid):
-            self.reply(b"Post does not exist.")
-            return
-
-        title, content = extract_title_content(self.raw_command)
+        postid = int(self.commands[0])
+        title = TITLE.match(self.raw_command)
+        content = CONTENT.match(self.raw_command)
         document = {
             "post_id": postid,
             "owner": self.user.whoami()
@@ -259,35 +258,80 @@ class Server(socketserver.StreamRequestHandler):
         else:
             self.reply(b"Not the post owner.")
 
+    @fallback
+    @parameter_check(COMMENT)
+    @login_required
+    @post_existance
     def comment(self):
-        if self.user.is_unauthorized():
-            self.reply(b"Please login first.")
-            return
-        try:
-            postid = int(self.commands[0])
-        except Exception:
-            self.reply(b"Post does not exist.")
-            return
-        if self.post.not_exist(postid):
-            self.reply(b"Post does not exist.")
+        """Usage: comment <postid> <message>"""
+        postid = int(self.commands[0])
+        comment = COMMENT.match(self.raw_command)
+        document = {
+            "post_id": postid,
+            "owner": self.user.whoami(),
+            "content": comment.group(1)
+        }
+        self.post.comment(document)
+        self.reply(b"Comment successfully.")
+
+    @fallback
+    @parameter_check(SUBSCRIPTION)
+    @login_required
+    def subscribe(self):
+        """Usage: subscribe --(board|author) <(boardname|authorname)> --keyword <keyword>"""
+        extracted = SUBSCRIPTION.match(self.raw_command)
+        if self.sub.subscribe(
+            self.user.whoami(),
+            extracted.group(1),
+            extracted.group(2),
+            extracted.group(3)
+        ):
+            self.reply(b'Subscribe successfully.')
         else:
-            comment = extract_comment(self.raw_command)
-            document = {
-                "post_id": postid,
-                "owner": self.user.whoami(),
-                "content": comment.group(1)
-            }
-            self.post.comment(document)
-            self.reply(b"Comment successfully.")
+            self.reply(b'Already subscribed.')
+
+    @fallback
+    @parameter_check(UNSUBSCRIPTION)
+    @login_required
+    def unsubscribe(self):
+        """Usage: unsubscribe --(board|author) <(boardname|authorname)>"""
+        extracted = UNSUBSCRIPTION.match(self.raw_command)
+        if self.sub.unsubscribe(
+            self.user.whoami(),
+            extracted.group(1),
+            extracted.group(2)
+        ):
+            self.reply(b'Unsubscribe successfully.')
+        else:
+            self.reply("You haven't subscribed {}", extracted.group(2))
+
+    @fallback
+    @parameter_check(0)
+    @login_required
+    def list_sub(self):
+        """Usage: list-sub"""
+        output = defaultdict(lambda: defaultdict(
+            lambda: defaultdict(dict)))
+        root = output["{}'s subscription".format(self.user.whoami())]
+        result = self.sub.list_all(self.user.whoami())
+        for subinfo in result:
+            root[subinfo['type'].capitalize()][subinfo['info']
+                                               ][subinfo['keyword']] = {}
+        self.reply(self.tree_format(output))
 
     def handle(self):
         print("New connection.")
         print(ONLINE.format(*self.client_address))
         self.reply(WELCOME)
-        client = pymongo.MongoClient()
+        client = pymongo.MongoClient(
+            'mongodb+srv://NP:cqa9aOpW5XwDaO7D@np-0qlhj.mongodb.net/NP?retryWrites=true&w=majority')
         self.user = User(client)
         self.board = BoardManager(client)
         self.post = PostManager(client)
+        self.sub = SubscribeManager(client)
+        notify = threading.Thread(target=self.check_self)
+        notify.daemon = True
+        notify.start()
         while True:
             self.raw_command = self.recv_command().strip()
             self.commands = self.raw_command.split()
@@ -297,16 +341,22 @@ class Server(socketserver.StreamRequestHandler):
             if self.commands[0] == "exit":
                 print(OFFLINE.format(*self.client_address))
                 if not self.user.is_unauthorized():
-                    while not subscribe_data[self.user.whoami()].empty():
-                        sleep(0.1)
+                    username = self.user.whoami()
+                    self.user.logout()
+                    sleep(0.1)
+                    while not subscribe_data[username].empty():
+                        self.reply(subscribe_data[username].get())
+                    online_user.remove(username)
+                    del subscribe_data[username]
                 break
-            func = self.function.get(self.commands[0])
-            if func is None:
-                error("Unknown command:", self.commands)
-                self.reply(b'')
-            else:
+            if self.commands[0] in self.function:
+                func = self.function[self.commands[0]]
                 del self.commands[0]
                 func()
+            else:
+                print("Unknown command:", self.commands)
+                self.reply("Unknown command: " + self.raw_command)
+
         self.request.shutdown(socket.SHUT_RDWR)
         self.request.close()
 
@@ -320,25 +370,27 @@ def main():
     default_server = socketserver.ThreadingTCPServer
     default_server.allow_reuse_address = True
     server = default_server(("0.0.0.0", port), Server)
-    complete("Server is running on port", port)
-    waiting("Waiting for connections.")
+    print("Server is running on port", port)
+    print("Waiting for connections.")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\b\b", end="")
-        waiting("Shutting down server.")
+        print("Shutting down server.")
         server.shutdown()
-        complete("Server closed.")
-        waiting("Resetting database.")
-        client = pymongo.MongoClient()
+        print("Server closed.")
+        print("Resetting database.")
+        client = pymongo.MongoClient(
+            'mongodb+srv://NP:cqa9aOpW5XwDaO7D@np-0qlhj.mongodb.net/NP?retryWrites=true&w=majority')
         client['NP']['user'].drop()
         client['NP']['board'].drop()
+        client['NP']['sub'].drop()
         client['NP']['seq_num'].update_one(
             {}, {"$set": {"id": 1}}, upsert=True)
         client['NP']['post'].drop()
         client['NP']['comment'].drop()
-        complete("All table reset.")
+        print("All table reset.")
 
 
 if __name__ == '__main__':

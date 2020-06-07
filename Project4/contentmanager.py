@@ -1,10 +1,16 @@
+from typing import Tuple
+
+from pymongo import MongoClient
+from pymongo.cursor import Cursor
+
+
 class BBSManager:
-    def __init__(self, connection):
+    def __init__(self, connection: MongoClient):
         self.connection = connection
 
 
 class BoardManager(BBSManager):
-    def not_exist(self, board_name):
+    def not_exist(self, board_name: str) -> bool:
         board = self.connection['NP']['board'].find_one(
             {"board_name": board_name}, {"_id": True})
         return board is None
@@ -65,3 +71,44 @@ class PostManager(BBSManager):
     def comment(self, document):
         collection = self.connection['NP']['comment']
         collection.insert_one(document)
+
+
+class SubscribeManager(BBSManager):
+    def list_all(self, username: str) -> Cursor:
+        collection = self.connection['NP']['sub']
+        return collection.find({'user': username})
+
+    def subscribe(self, username: str, subtype: str, subinfo: str, keyword: str) -> bool:
+        collection = self.connection['NP']['sub']
+        document = {
+            "user": username,
+            "type": subtype,
+            "info": subinfo,
+            "keyword": keyword
+        }
+        if collection.find_one(document, {"_id": True}) is None:
+            collection.insert_one(document)
+            return True
+        return False
+
+    def unsubscribe(self, username: str, subtype: str, subinfo: str) -> bool:
+        collection = self.connection['NP']['sub']
+        document = {
+            "user": username,
+            "type": subtype,
+            "info": subinfo
+        }
+
+        result = collection.delete_many(document)
+        return result.deleted_count != 0
+
+    def find_subscriber(self, board: str, author: str) -> Tuple[Cursor]:
+        collection = self.connection['NP']['sub']
+        mask = {
+            "_id": False,
+            "user": True,
+            "keyword": True
+        }
+        boards = collection.find({"type": "board", "info": board}, mask)
+        authors = collection.find({"type": "author", "info": author}, mask)
+        return boards, authors
