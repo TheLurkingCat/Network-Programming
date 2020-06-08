@@ -10,8 +10,8 @@ from queue import Queue
 from time import sleep
 
 import pymongo
-from asciitree import LeftAligned
 
+from asciitree import LeftAligned
 from contentmanager import BoardManager, PostManager, SubscribeManager
 from user import User
 from utils import *
@@ -323,8 +323,7 @@ class Server(socketserver.StreamRequestHandler):
         print("New connection.")
         print(ONLINE.format(*self.client_address))
         self.reply(WELCOME)
-        client = pymongo.MongoClient(
-            'mongodb+srv://NP:cqa9aOpW5XwDaO7D@np-0qlhj.mongodb.net/NP?retryWrites=true&w=majority')
+        client = pymongo.MongoClient()
         self.user = User(client)
         self.board = BoardManager(client)
         self.post = PostManager(client)
@@ -381,8 +380,7 @@ def main():
         server.shutdown()
         print("Server closed.")
         print("Resetting database.")
-        client = pymongo.MongoClient(
-            'mongodb+srv://NP:cqa9aOpW5XwDaO7D@np-0qlhj.mongodb.net/NP?retryWrites=true&w=majority')
+        client = pymongo.MongoClient()
         client['NP']['user'].drop()
         client['NP']['board'].drop()
         client['NP']['sub'].drop()
