@@ -11,8 +11,8 @@ WELCOME = b"\
 
 
 HELP = {
-    "HELP_REGISTER": b"Usage: register <username> <email> <password>\r\n",
-    "HELP_LOGIN": b"Usage: login <username> <password>\r\n"
+    "REGISTER": b"Usage: register <username> <email> <password>\r\n",
+    "LOGIN": b"Usage: login <username> <password>\r\n"
 }
 
 FAIL = {

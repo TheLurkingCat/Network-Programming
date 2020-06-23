@@ -19,7 +19,7 @@ class User:
             {"$setOnInsert": document},
             upsert=True
         )
-        return result is not None
+        return result.upserted_id is not None
 
     def login(self, name: str, password: str) -> bool:
         document = {

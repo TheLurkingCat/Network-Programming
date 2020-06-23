@@ -32,7 +32,7 @@ class Server(socketserver.StreamRequestHandler):
         return recv.strip().split()
 
     def register(self):
-        if len(self.commands) != 4:
+        if len(self.commands) != 3:
             self.reply(usage("register"))
         else:
             username, _, password = self.commands
@@ -42,7 +42,7 @@ class Server(socketserver.StreamRequestHandler):
                 self.reply(fail("username_exists"))
 
     def login(self):
-        if len(self.commands) != 3:
+        if len(self.commands) != 2:
             self.reply(usage("login"))
         elif self.user.is_unauthorized():
             username, password = self.commands
@@ -57,14 +57,14 @@ class Server(socketserver.StreamRequestHandler):
         if self.user.is_unauthorized():
             self.reply(fail("unauthorized"))
         else:
-            self.user.logout()
             self.reply("Bye, {}.\r\n", self.user.username)
+            self.user.logout()
 
     def whoami(self):
         if self.user.is_unauthorized():
             self.reply(fail("unauthorized"))
         else:
-            self.wfile.write("{}\r\n", self.user.username)
+            self.reply("{}\r\n", self.user.username)
 
     def exit(self):
         self.connection_close = True
